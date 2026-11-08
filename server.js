@@ -366,7 +366,9 @@ app.get('/proxy*', async (req, res) => {
 
     // Binary segment / key / etc.
     const buffer = await upstream.buffer();
-    res.set('Content-Type', contentType || 'application/octet-stream');
+    // Force correct content-type for HLS segments (upstream may mislabel as text/html)
+    const resolvedContentType = isPlaylist ? 'application/vnd.apple.mpegurl' : 'video/mp2t';
+    res.set('Content-Type', resolvedContentType);
     res.set('Cache-Control', 'public, max-age=86400');
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Accept-Ranges', 'bytes');
