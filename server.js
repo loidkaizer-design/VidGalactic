@@ -301,6 +301,69 @@ app.get('/src/webvtt/:subtitle_id', async (req, res) => {
   }
 });
 
+/* ---- proxy endpoint for HLS streams (bypasses CORS/Referer restrictions) ---- */
+/* Proxies .m3u8 manifests and segments with proper Referer/Origin headers.
+   Rewrites manifest URLs so segments also flow through the proxy. */
+app.get('/proxy', async (req, res) => {
+  try {
+    const { url: targetUrl } = req.query;
+    if (!targetUrl) {
+      return res.status(400).json({ success: false, error: 'Missing ?url=<absolute_url>' });
+    }
+    let decoded;
+    try { decoded = decodeURIComponent(targetUrl); } catch (e) { decoded = targetUrl; }
+    const parsed = new URL(decoded);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ success: false, error: 'url must be http or https' });
+    }
+
+    const upstream = await fetch(decoded, {
+      headers: {
+        'User-Agent': UA,
+        'Referer': 'https://nextgencloudfabric.com/',
+        'Origin': 'https://nextgencloudfabric.com',
+        'Accept': '*/*',
+      },
+      redirect: 'follow',
+    });
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ success: false, error: `Upstream returned ${upstream.status}` });
+    }
+
+    const contentType = upstream.headers.get('content-type') || '';
+    const isPlaylist = contentType.includes('mpegurl') || /\.m3u8(?:$|[?#])/i.test(parsed.pathname);
+
+    if (isPlaylist) {
+      const text = await upstream.text();
+      const base = parsed.origin + parsed.pathname.replace(/\/[^\/]*$/, '/');
+      // Rewrite relative segment URLs to go through /proxy
+      const rewritten = text.replace(
+        /(^|\s)([^\s"']+\.(?:ts|m3u8|aac|mp4))(\s|$)/gim,
+        (match, pre, url, post) => {
+          let abs;
+          try { abs = new URL(url, base).href; } catch (e) { return match; }
+          return pre + '/proxy?url=' + encodeURIComponent(abs) + post;
+        }
+      );
+      res.set('Content-Type', 'application/vnd.apple.mpegurl');
+      res.set('Cache-Control', 'no-store');
+      res.set('Access-Control-Allow-Origin', '*');
+      return res.send(rewritten);
+    }
+
+    // Binary segment / key / etc.
+    const buffer = await upstream.buffer();
+    res.set('Content-Type', contentType || 'application/octet-stream');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Accept-Ranges', 'bytes');
+    return res.send(buffer);
+  } catch (err) {
+    console.error('[/proxy] error:', err.message);
+    return res.status(502).json({ success: false, error: err.message || 'Proxy failed.' });
+  }
+});
+
 /* ---- health ---- */
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'vidgalactic-api', time: new Date().toISOString() });
