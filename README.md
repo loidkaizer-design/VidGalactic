@@ -296,6 +296,22 @@ curl -H "Accept: text/vtt" \
 
 ---
 
+## ⚠️ OpenSubtitles IP Blocking Note
+
+The `/src/sub/:tmdb_id` endpoint queries [OpenSubtitles REST API](https://rest.opensubtitles.org/). OpenSubtitles blocks requests from datacenter/Vercel IP addresses, so this endpoint may return `403 Forbidden` when deployed on Vercel.
+
+- **Works locally** (residential IP): ✅
+- **Works on Vercel** (datacenter IP): ❌ May return 403
+
+**Workarounds:**
+1. Run the API locally: `npm start`
+2. Use a proxy/server with a residential IP
+3. Call OpenSubtitles directly from your client (bypassing VidGalactic)
+
+The `/src/webvtt/:subtitle_id` endpoint works on all platforms (Vercel included) since it fetches from stellarconductornexus CDN, not OpenSubtitles.
+
+---
+
 ## Frontend Integration
 
 Pair this API with the **Galactic V5** player templates:
