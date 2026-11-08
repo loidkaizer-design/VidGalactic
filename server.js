@@ -339,8 +339,8 @@ app.get('/proxy*', async (req, res) => {
 
       // Rewrite all relative/absolute URLs in the playlist to go through /proxy
       const rewritten = text.replace(
-        /(^|\s)([^\s"',]+)(?:\s|$)/gim,
-        (match, pre, url) => {
+        /(^|\s)([^\s"',]+)(\s|$)/gim,
+        (match, pre, url, post) => {
           // Skip comments, tags, empty lines, numbers, durations
           if (url.startsWith('#') || url.startsWith('EXT') || /^\d/.test(url) ||
               url.includes('BANDWIDTH') || url.includes('CODECS') ||
@@ -354,7 +354,7 @@ app.get('/proxy*', async (req, res) => {
           }
           let abs;
           try { abs = new URL(url.trim(), base).href; } catch (e) { return match; }
-          return pre + '/proxy?url=' + encodeURIComponent(abs) + (post || '');
+          return pre + '/proxy?url=' + encodeURIComponent(abs) + post;
         }
       );
       res.set('Content-Type', 'application/vnd.apple.mpegurl');
