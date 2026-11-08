@@ -274,10 +274,25 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
     }
   }
 
-  /* ---- retry stream ---- */
+  /* ---- retry stream with fresh URL ---- */
   function retryStream(){
-    if(currentSource){
-      loadMovie(currentSource, []);
+    retryCount++;
+    if(retryCount<=MAX_RETRIES){
+      showError('Stream expired — fetching fresh URL ('+retryCount+'/'+MAX_RETRIES+')…');
+      // Re-fetch movie API to get a fresh signed stream URL
+      fetchJSON('/e/movie/'+encodeURIComponent(tmdbId)).then(function(json){
+        var data=json.data||{};
+        var streamUrls=data.stream_urls||[];
+        if(streamUrls&&streamUrls.length>0){
+          loadMovie(streamUrls[0], currentSubtitles.map(function(s){return {url:s.url,lang:s.lang,name:s.name};}));
+        } else {
+          showError('No stream URLs available after retry.');
+        }
+      }).catch(function(err){
+        showError('Failed to refresh stream: '+String(err.message||err));
+      });
+    } else {
+      showError('Failed to load stream after '+MAX_RETRIES+' retries. Try refreshing the page.');
     }
   }
 
