@@ -29,7 +29,6 @@ const UA =
 const DEFAULT_REFERER = 'https://nextgencloudfabric.com/';
 
 /* ---- middleware ---- */
-app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
@@ -37,6 +36,8 @@ app.use((_req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Range');
+  // Permissive CSP for embed pages (needs hls.js CDN, Google Fonts, inline scripts)
+  res.header('Content-Security-Policy', "default-src 'self' *; script-src 'self' 'unsafe-inline' 'unsafe-eval' *; style-src 'self' 'unsafe-inline' *; img-src 'self' data: *; media-src 'self' *; font-src 'self' data: *; connect-src 'self' *;");
   next();
 });
 
