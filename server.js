@@ -304,13 +304,16 @@ app.get('/', (_req, res) => {
   });
 });
 
-/* ---- start ---- */
-app.listen(PORT, () => {
-  console.log(`VidGalactic API listening on http://localhost:${PORT}`);
-  console.log(`  GET /e/movie/:tmdb_id   -> Movie aggregates`);
-  console.log(`  GET /e/tv/:tmdb_id      -> TV series aggregates`);
-  console.log(`  GET /src/sub/:tmdb_id   -> Subtitle track list`);
-  console.log(`  GET /src/webvtt/:id     -> WebVTT subtitle content`);
-});
+/* ---- start (local dev) ---- */
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`VidGalactic API listening on http://localhost:${PORT}`);
+    console.log(`  GET /e/movie/:tmdb_id   -> Movie aggregates`);
+    console.log(`  GET /e/tv/:tmdb_id      -> TV series aggregates`);
+    console.log(`  GET /src/sub/:tmdb_id   -> Subtitle track list`);
+    console.log(`  GET /src/webvtt/:id     -> WebVTT subtitle content`);
+  });
+}
 
+/* ---- Vercel serverless handler ---- */
 module.exports = app;
