@@ -4,10 +4,10 @@
  * Endpoints:
  *   GET /e/movie/:tmdb_id      -> Movie aggregates (title, backdrop, stream_urls, file_name, default_subs)
  *   GET /e/tv/:tmdb_id         -> TV series aggregates (seasons, episodes, stream_urls per episode)
- *   GET /src/sub/:tmdb_id      -> List of subtitle tracks for a TMDB ID
- *   GET /src/webvtt/:subtitle_id -> WebVTT subtitle content (SRT converted to VTT)
+ *   GET /src/sub/:tmdb_id      -> List of subtitle tracks via OpenSubtitles (imdbid lookup)
+ *   GET /src/webvtt/:subtitle_id -> WebVTT subtitle content from stellarconductornexus
  *
- * Proxies vaplayer.ru streamdata API and converts subtitles to WebVTT.
+ * Proxies vaplayer.ru streamdata API + OpenSubtitles + stellarconductornexus subtitle CDN.
  */
 
 const express = require('express');
@@ -20,6 +20,8 @@ const PORT = process.env.PORT || 3000;
 
 /* ---- configuration ---- */
 const VAPLAYER_API = 'https://streamdata.vaplayer.ru/api.php';
+const OPENSUB_SEARCH = 'https://rest.opensubtitles.org/search';
+const SUB_VTT_CDN = 'https://stellarconductornexus.com/embed/iframe_player/cache/subs/19';
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const DEFAULT_REFERER = 'https://nextgencloudfabric.com/';
@@ -51,36 +53,20 @@ function vaplayerHeaders() {
 async function fetchJson(url, headers) {
   const res = await fetch(url, { headers, redirect: 'follow' });
   if (!res.ok) throw new Error(`Upstream returned ${res.status}`);
-  return res.json();
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); } catch (e) { throw new Error(`Upstream returned non-JSON: ${res.status}`); }
 }
 
-function normalizeSubtitle(sub) {
-  return {
-    id: sub.id || sub.url || '',
-    code: sub.code || sub.lang || 'und',
-    lang: sub.lang || sub.code || 'und',
-    name: sub.name || sub.code || sub.lang || 'Subtitle',
-    url: sub.url || '',
-  };
+async function fetchText(url, headers) {
+  const res = await fetch(url, { headers, redirect: 'follow' });
+  if (!res.ok) throw new Error(`Upstream returned ${res.status}`);
+  return res.text();
 }
 
-function srtToVtt(srt) {
-  if (!srt) return 'WEBVTT\n\n';
-  let text = srt.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  if (text.trim().startsWith('WEBVTT')) return text;
-  const lines = text.split('\n');
-  const out = ['WEBVTT', ''];
-  for (const line of lines) {
-    if (/^\s*\d+\s*$/.test(line)) continue; // drop subtitle index numbers
-    if (line.includes('-->')) {
-      // convert timestamps: 00:00:00,000 -> 00:00:00.000
-      text = line.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-      out.push(text);
-    } else {
-      out.push(line);
-    }
-  }
-  return out.join('\n').trim() + '\n';
+function numericImdbId(imdbId) {
+  return String(imdbId || '').replace(/^tt/i, '');
 }
 
 /* ============================================================
@@ -107,7 +93,13 @@ app.get('/e/movie/:tmdb_id', async (req, res) => {
 
     const data = json.data || {};
     const stream_urls = Array.isArray(data.stream_urls) ? data.stream_urls : [];
-    const default_subs = Array.isArray(json.default_subs) ? json.default_subs.map(normalizeSubtitle) : [];
+    const default_subs = Array.isArray(json.default_subs) ? json.default_subs.map((s) => ({
+      id: s.id || s.url || '',
+      code: s.code || s.lang || 'und',
+      lang: s.lang || s.code || 'und',
+      name: s.name || s.code || s.lang || 'Subtitle',
+      url: s.url || '',
+    })) : [];
 
     return res.json({
       success: true,
@@ -155,7 +147,13 @@ app.get('/e/tv/:tmdb_id', async (req, res) => {
 
     const data = json.data || {};
     const stream_urls = Array.isArray(data.stream_urls) ? data.stream_urls : [];
-    const default_subs = Array.isArray(json.default_subs) ? json.default_subs.map(normalizeSubtitle) : [];
+    const default_subs = Array.isArray(json.default_subs) ? json.default_subs.map((s) => ({
+      id: s.id || s.url || '',
+      code: s.code || s.lang || 'und',
+      lang: s.lang || s.code || 'und',
+      name: s.name || s.code || s.lang || 'Subtitle',
+      url: s.url || '',
+    })) : [];
     const eps = data.eps || {}; // { "1": [1,2,3], "2": [1,2] }
 
     // Build flat episode list from eps map
@@ -196,8 +194,11 @@ app.get('/e/tv/:tmdb_id', async (req, res) => {
 
 /**
  * GET /src/sub/:tmdb_id
- * Returns the list of available subtitle tracks for a TMDB ID.
- * Fetches movie data from vaplayer and extracts default_subs.
+ * Returns subtitle tracks for a TMDB ID.
+ * Flow:
+ *   1. Query vaplayer API to get the IMDB ID for this TMDB ID.
+ *   2. Query OpenSubtitles REST: /search/imdbid-{numeric_imdb}/sublanguageid-eng
+ *   3. Return normalized subtitle list.
  */
 app.get('/src/sub/:tmdb_id', async (req, res) => {
   try {
@@ -206,21 +207,80 @@ app.get('/src/sub/:tmdb_id', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid tmdb_id. Must be numeric.' });
     }
 
-    const url = `${VAPLAYER_API}?tmdb=${encodeURIComponent(tmdb_id)}&type=movie`;
-    const json = await fetchJson(url, vaplayerHeaders());
-
-    if (json.status_code && String(json.status_code) !== '200') {
-      return res.status(502).json({ success: false, error: json.error || `API error ${json.status_code}` });
+    // Step 1: Get IMDB ID from vaplayer API
+    const vaplayerUrl = `${VAPLAYER_API}?tmdb=${encodeURIComponent(tmdb_id)}&type=movie`;
+    let vaplayerJson;
+    try {
+      vaplayerJson = await fetchJson(vaplayerUrl, vaplayerHeaders());
+    } catch (e) {
+      // If vaplayer fails, still try OpenSubtitles with tmdb_id as fallback (best effort)
+      vaplayerJson = null;
     }
 
-    const rawSubs = Array.isArray(json.default_subs) ? json.default_subs : [];
-    const subs = rawSubs.map((sub, idx) => normalizeSubtitle({ ...sub, id: idx }));
+    const imdbId = (vaplayerJson && vaplayerJson.data && vaplayerJson.data.imdb_id) || null;
+    const numericId = imdbId ? numericImdbId(imdbId) : null;
+
+    if (!numericId) {
+      return res.status(404).json({
+        success: false,
+        error: 'Could not resolve IMDB ID for this TMDB ID. No subtitles available.',
+        tmdb_id,
+      });
+    }
+
+    // Step 2: Query OpenSubtitles REST API
+    const subUrl = `${OPENSUB_SEARCH}/imdbid-${numericId}/sublanguageid-eng`;
+    let subJson;
+    try {
+      subJson = await fetchJson(subUrl, {
+        'User-Agent': UA,
+        'Accept': 'application/json',
+      });
+    } catch (e) {
+      console.error('[/src/sub/:tmdb_id] OpenSubtitles error:', e.message);
+      return res.status(502).json({
+        success: false,
+        error: 'Failed to query OpenSubtitles.',
+        detail: e.message,
+        tmdb_id,
+        imdb_id: imdbId,
+      });
+    }
+
+    // OpenSubtitles returns a list (or object with data). Normalize.
+    let rawList = [];
+    if (Array.isArray(subJson)) {
+      rawList = subJson;
+    } else if (subJson && Array.isArray(subJson.data)) {
+      rawList = subJson.data;
+    } else if (subJson && typeof subJson === 'object') {
+      // single object
+      rawList = [subJson];
+    }
+
+    const subtitles = rawList.map((sub, idx) => {
+      // OpenSubtitles fields vary; handle common ones
+      const id = sub.IDSubtitleFile || sub.id || sub.IDSubtitle || idx;
+      const name = sub.SubFileName || sub.SubFileName || sub.filename || `Subtitle ${idx + 1}`;
+      const lang = sub.SubLanguageID || sub.language || 'eng';
+      // Build the stellarconductornexus VTT URL if we have an ID
+      const vttUrl = id ? `${SUB_VTT_CDN}/${id}.vtt` : '';
+      return {
+        id: String(id),
+        code: lang,
+        lang: lang,
+        name: String(name),
+        url: vttUrl,
+        sub_id: String(id), // for the webvtt endpoint
+      };
+    });
 
     return res.json({
       success: true,
       tmdb_id,
-      subtitle_count: subs.length,
-      subtitles: subs,
+      imdb_id: imdbId,
+      subtitle_count: subtitles.length,
+      subtitles,
     });
   } catch (err) {
     console.error('[/src/sub/:tmdb_id] error:', err.message);
@@ -230,54 +290,48 @@ app.get('/src/sub/:tmdb_id', async (req, res) => {
 
 /**
  * GET /src/webvtt/:subtitle_id
- * Fetches a subtitle URL and converts SRT to WebVTT.
- * Query: ?url=<subtitle_url>  (full subtitle URL)
- * OR     :param is a numeric index resolved against /src/sub cache (simplest: pass ?url=)
- *
- * The subtitle_id param can be:
- *   - a numeric index (requires prior /src/sub call to map) — we accept ?url= directly
- *   - or the client passes ?url=<encoded subtitle url>
- *
- * Returns Content-Type: text/vtt
+ * Fetches WebVTT subtitle from stellarconductornexus CDN:
+ *   https://stellarconductornexus.com/embed/iframe_player/cache/subs/19/{subtitle_id}.vtt
  */
 app.get('/src/webvtt/:subtitle_id', async (req, res) => {
   try {
     const { subtitle_id } = req.params;
-    const { url: subUrl } = req.query;
+    if (!subtitle_id) {
+      return res.status(400).json({ success: false, error: 'Missing subtitle_id.' });
+    }
 
-    let targetUrl = subUrl;
+    const vttUrl = `${SUB_VTT_CDN}/${encodeURIComponent(subtitle_id)}.vtt`;
 
-    // If no url query, try to interpret subtitle_id as an index —
-    // we can't resolve without a tmdb context, so require ?url=
-    if (!targetUrl) {
-      return res.status(400).json({
+    let vttText;
+    try {
+      vttText = await fetchText(vttUrl, {
+        'User-Agent': UA,
+        'Accept': 'text/vtt, text/plain, */*',
+        'Referer': 'https://stellarconductornexus.com/',
+      });
+    } catch (e) {
+      console.error('[/src/webvtt/:subtitle_id] fetch error:', e.message);
+      return res.status(502).json({
         success: false,
-        error: 'Missing ?url=<subtitle_url> query parameter.',
-        usage: 'GET /src/webvtt/:subtitle_id?url=https://example.com/subtitle.srt',
+        error: 'Failed to fetch WebVTT subtitle.',
+        detail: e.message,
+        subtitle_id,
       });
     }
 
-    // Decode if it was passed encoded
-    try {
-      targetUrl = decodeURIComponent(targetUrl);
-    } catch (e) { /* use as-is */ }
-
-    const subRes = await fetch(targetUrl, {
-      headers: { 'User-Agent': UA },
-      redirect: 'follow',
-    });
-
-    if (!subRes.ok) {
-      return res.status(502).json({ success: false, error: `Subtitle source returned ${subRes.status}` });
+    // Ensure it starts with WEBVTT header
+    const trimmed = vttText.trim();
+    if (!trimmed.startsWith('WEBVTT')) {
+      res.set('Content-Type', 'text/vtt; charset=utf-8');
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Access-Control-Allow-Origin', '*');
+      return res.send('WEBVTT\n\n' + trimmed);
     }
-
-    const raw = await subRes.text();
-    const vtt = srtToVtt(raw);
 
     res.set('Content-Type', 'text/vtt; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=86400');
     res.set('Access-Control-Allow-Origin', '*');
-    return res.send(vtt);
+    return res.send(trimmed);
   } catch (err) {
     console.error('[/src/webvtt/:subtitle_id] error:', err.message);
     return res.status(502).json({ success: false, error: err.message || 'Failed to fetch subtitle.' });
@@ -293,12 +347,12 @@ app.get('/health', (_req, res) => {
 app.get('/', (_req, res) => {
   res.json({
     service: 'VidGalactic API',
-    version: '1.0.0',
+    version: '1.1.0',
     endpoints: {
       'GET /e/movie/:tmdb_id': 'Movie aggregates (title, backdrop, stream_urls, default_subs)',
       'GET /e/tv/:tmdb_id': 'TV series aggregates (seasons, episodes, stream_urls)',
-      'GET /src/sub/:tmdb_id': 'List available subtitle tracks',
-      'GET /src/webvtt/:subtitle_id?url=...': 'Fetch and convert subtitle to WebVTT',
+      'GET /src/sub/:tmdb_id': 'Subtitle track list via OpenSubtitles (imdbid lookup)',
+      'GET /src/webvtt/:subtitle_id': 'WebVTT subtitle content from stellarconductornexus CDN',
       'GET /health': 'Health check',
     },
   });
@@ -310,8 +364,8 @@ if (require.main === module) {
     console.log(`VidGalactic API listening on http://localhost:${PORT}`);
     console.log(`  GET /e/movie/:tmdb_id   -> Movie aggregates`);
     console.log(`  GET /e/tv/:tmdb_id      -> TV series aggregates`);
-    console.log(`  GET /src/sub/:tmdb_id   -> Subtitle track list`);
-    console.log(`  GET /src/webvtt/:id     -> WebVTT subtitle content`);
+    console.log(`  GET /src/sub/:tmdb_id   -> Subtitle track list (OpenSubtitles)`);
+    console.log(`  GET /src/webvtt/:id     -> WebVTT subtitle (stellarconductornexus)`);
   });
 }
 
