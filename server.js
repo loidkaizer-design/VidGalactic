@@ -218,10 +218,16 @@ app.get('/src/sub/:tmdb_id', async (req, res) => {
     }
 
     // Step 2: Query OpenSubtitles REST API
+    // OpenSubtitles requires X-User-Agent header (same as streamgrabber)
+    const OPENSUB_UA = 'trailers.to-UA';
     const subUrl = `${OPENSUB_SEARCH}/imdbid-${numericId}/sublanguageid-eng`;
     let subJson;
     try {
-      subJson = await fetchJson(subUrl, { 'User-Agent': UA, 'Accept': 'application/json' });
+      subJson = await fetchJson(subUrl, {
+        'User-Agent': 'Mozilla/5.0',
+        'X-User-Agent': OPENSUB_UA,
+        'Accept': 'application/json',
+      });
     } catch (e) {
       console.error('[/src/sub/:tmdb_id] OpenSubtitles error:', e.message);
       return res.status(502).json({
