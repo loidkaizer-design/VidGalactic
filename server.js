@@ -2,12 +2,12 @@
  * VidGalactic API Server
  * ----------------------
  * Endpoints:
- *   GET /e/movie/:tmdb_id      -> HTML embed player (browser) OR JSON (API call with Accept: application/json)
- *   GET /e/tv/:tmdb_id         -> HTML embed player (browser) OR JSON (API call with Accept: application/json)
- *   GET /src/sub/:tmdb_id      -> List of subtitle tracks via OpenSubtitles (imdbid lookup)
- *   GET /src/webvtt/:subtitle_id -> WebVTT subtitle content from stellarconductornexus CDN
- *
- * Proxies vaplayer.ru streamdata API + OpenSubtitles + stellarconductornexus subtitle CDN.
+ *   GET /e/movie/:tmdb_id      -> HTML embed player (browser) or JSON (API)
+ *   GET /e/tv/:tmdb_id         -> HTML embed player (browser) or JSON (API)
+ *   GET /src/sub/:tmdb_id      -> List of subtitle tracks via OpenSubtitles
+ *   GET /src/webvtt/:subtitle_id -> WebVTT subtitle content from stellarconductornexus
+ *   GET /proxy?url=<encoded>   -> HLS manifest/segment proxy with Referer/Origin
+ *   GET /health                -> Health check
  */
 
 const express = require('express');
@@ -77,17 +77,13 @@ const EMBED_TV_HTML = fs.readFileSync(path.join(__dirname, 'public/embed-tv.html
 
 function wantsHtml(req) {
   const accept = req.headers.accept || '';
-  // Browser navigation requests include text/html; explicit API calls set Accept: application/json
   return accept.includes('text/html') && !accept.includes('application/json');
 }
 
 /* ============================================================
-   EMBED PLAYER ROUTES (HTML for browsers, JSON for API)
+   EMBED PLAYER ROUTES
    ============================================================ */
 
-/**
- * GET /e/movie/:tmdb_id
- */
 app.get('/e/movie/:tmdb_id', async (req, res) => {
   const { tmdb_id } = req.params;
   if (!/^\d+$/.test(tmdb_id)) {
@@ -99,7 +95,6 @@ app.get('/e/movie/:tmdb_id', async (req, res) => {
     return res.send(EMBED_MOVIE_HTML);
   }
 
-  // JSON API response
   try {
     const url = `${VAPLAYER_API}?tmdb=${encodeURIComponent(tmdb_id)}&type=movie`;
     const json = await fetchJson(url, vaplayerHeaders());
@@ -131,9 +126,6 @@ app.get('/e/movie/:tmdb_id', async (req, res) => {
   }
 });
 
-/**
- * GET /e/tv/:tmdb_id
- */
 app.get('/e/tv/:tmdb_id', async (req, res) => {
   const { tmdb_id } = req.params;
   const { season, episode } = req.query;
@@ -146,7 +138,6 @@ app.get('/e/tv/:tmdb_id', async (req, res) => {
     return res.send(EMBED_TV_HTML);
   }
 
-  // JSON API response
   try {
     let url = `${VAPLAYER_API}?tmdb=${encodeURIComponent(tmdb_id)}&type=tv`;
     if (season) url += `&season=${encodeURIComponent(season)}`;
@@ -191,6 +182,7 @@ app.get('/e/tv/:tmdb_id', async (req, res) => {
 /**
  * GET /src/sub/:tmdb_id
  * Subtitle tracks via OpenSubtitles REST API.
+ * Note: OpenSubtitles blocks datacenter/Vercel IPs, so this may 403 in production.
  */
 app.get('/src/sub/:tmdb_id', async (req, res) => {
   try {
@@ -199,7 +191,6 @@ app.get('/src/sub/:tmdb_id', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid tmdb_id. Must be numeric.' });
     }
 
-    // Step 1: Get IMDB ID from vaplayer API
     const vaplayerUrl = `${VAPLAYER_API}?tmdb=${encodeURIComponent(tmdb_id)}&type=movie`;
     let vaplayerJson;
     try {
@@ -212,13 +203,10 @@ app.get('/src/sub/:tmdb_id', async (req, res) => {
 
     if (!numericId) {
       return res.status(404).json({
-        success: false, error: 'Could not resolve IMDB ID for this TMDB ID.',
-        tmdb_id,
+        success: false, error: 'Could not resolve IMDB ID for this TMDB ID.', tmdb_id,
       });
     }
 
-    // Step 2: Query OpenSubtitles REST API
-    // OpenSubtitles requires X-User-Agent header (same as streamgrabber)
     const OPENSUB_UA = 'trailers.to-UA';
     const subUrl = `${OPENSUB_SEARCH}/imdbid-${numericId}/sublanguageid-eng`;
     let subJson;
@@ -301,23 +289,35 @@ app.get('/src/webvtt/:subtitle_id', async (req, res) => {
   }
 });
 
-/* ---- proxy endpoint for HLS streams (bypasses CORS/Referer restrictions) ---- */
-/* Proxies .m3u8 manifests and segments with proper Referer/Origin headers.
-   Rewrites manifest URLs so segments also flow through the proxy. */
-app.get('/proxy', async (req, res) => {
+/**
+ * GET /proxy?url=<urlencoded>
+ * Robust HLS proxy: fetches manifests and segments with Referer/Origin headers.
+ * Rewrites .m3u8 variant URLs so all segments flow through /proxy.
+ * Accepts URL as query param OR as path segment.
+ */
+app.get('/proxy*', async (req, res) => {
   try {
-    const { url: targetUrl } = req.query;
-    if (!targetUrl) {
-      return res.status(400).json({ success: false, error: 'Missing ?url=<absolute_url>' });
+    // Support both /proxy?url=<encoded> and /proxy/<encoded-path>
+    let targetUrl = req.query.url;
+    if (!targetUrl && req.path.startsWith('/proxy/')) {
+      const pathPart = req.path.substring('/proxy/'.length);
+      targetUrl = pathPart;
     }
-    let decoded;
-    try { decoded = decodeURIComponent(targetUrl); } catch (e) { decoded = targetUrl; }
+    if (!targetUrl) {
+      return res.status(400).json({ success: false, error: 'Missing url parameter or path.' });
+    }
+
+    // Decode - handle single and double encoding
+    let decoded = targetUrl;
+    try { decoded = decodeURIComponent(decoded); } catch (e) {}
+    try { decoded = decodeURIComponent(decoded); } catch (e) {} // double decode
+
     const parsed = new URL(decoded);
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       return res.status(400).json({ success: false, error: 'url must be http or https' });
     }
 
-    const upstream = await fetch(decoded, {
+    const upstream = await fetch(decoded.toString(), {
       headers: {
         'User-Agent': UA,
         'Referer': 'https://nextgencloudfabric.com/',
@@ -327,7 +327,7 @@ app.get('/proxy', async (req, res) => {
       redirect: 'follow',
     });
     if (!upstream.ok) {
-      return res.status(upstream.status).json({ success: false, error: `Upstream returned ${upstream.status}` });
+      return res.status(upstream.status).send(`Upstream returned ${upstream.status}`);
     }
 
     const contentType = upstream.headers.get('content-type') || '';
@@ -336,13 +336,25 @@ app.get('/proxy', async (req, res) => {
     if (isPlaylist) {
       const text = await upstream.text();
       const base = parsed.origin + parsed.pathname.replace(/\/[^\/]*$/, '/');
-      // Rewrite relative segment URLs to go through /proxy
+
+      // Rewrite all relative/absolute URLs in the playlist to go through /proxy
       const rewritten = text.replace(
-        /(^|\s)([^\s"']+\.(?:ts|m3u8|aac|mp4))(\s|$)/gim,
-        (match, pre, url, post) => {
+        /(^|\s)([^\s"',]+)(?:\s|$)/gim,
+        (match, pre, url) => {
+          // Skip comments, tags, empty lines, numbers, durations
+          if (url.startsWith('#') || url.startsWith('EXT') || /^\d/.test(url) ||
+              url.includes('BANDWIDTH') || url.includes('CODECS') ||
+              url.includes('RESOLUTION') || url.includes('FRAME-RATE') ||
+              url.includes('PROGRAM-ID') || url.match(/^\d+:\d+/)) {
+            return match;
+          }
+          // Skip already-proxied URLs
+          if (url.includes('/proxy?url=') || url.includes('/proxy/')) {
+            return match;
+          }
           let abs;
-          try { abs = new URL(url, base).href; } catch (e) { return match; }
-          return pre + '/proxy?url=' + encodeURIComponent(abs) + post;
+          try { abs = new URL(url.trim(), base).href; } catch (e) { return match; }
+          return pre + '/proxy?url=' + encodeURIComponent(abs) + (post || '');
         }
       );
       res.set('Content-Type', 'application/vnd.apple.mpegurl');
@@ -373,19 +385,14 @@ app.get('/health', (_req, res) => {
 app.get('/', (_req, res) => {
   res.json({
     service: 'VidGalactic API',
-    version: '2.0.0',
+    version: '3.0.0',
     endpoints: {
-      'GET /e/movie/:tmdb_id': 'Movie embed player (HTML) or JSON aggregates (Accept: application/json)',
-      'GET /e/tv/:tmdb_id': 'TV series embed player (HTML) or JSON aggregates (Accept: application/json)',
-      'GET /src/sub/:tmdb_id': 'Subtitle track list via OpenSubtitles (imdbid lookup)',
-      'GET /src/webvtt/:subtitle_id': 'WebVTT subtitle content from stellarconductornexus CDN',
+      'GET /e/movie/:tmdb_id': 'Movie embed player (HTML) or JSON aggregates',
+      'GET /e/tv/:tmdb_id': 'TV series embed player (HTML) or JSON aggregates',
+      'GET /src/sub/:tmdb_id': 'Subtitle track list via OpenSubtitles',
+      'GET /src/webvtt/:subtitle_id': 'WebVTT subtitle content',
+      'GET /proxy?url=<encoded>': 'HLS manifest/segment proxy',
       'GET /health': 'Health check',
-    },
-    usage: {
-      movie: 'https://vidgalactic.vercel.app/e/movie/550',
-      tv: 'https://vidgalactic.vercel.app/e/tv/1396?season=1&episode=1',
-      subs: 'https://vidgalactic.vercel.app/src/sub/550',
-      webvtt: 'https://vidgalactic.vercel.app/src/webvtt/SUB_ID?url=...',
     },
   });
 });
@@ -398,8 +405,8 @@ if (require.main === module) {
     console.log(`  GET /e/tv/:tmdb_id      -> TV embed player / JSON`);
     console.log(`  GET /src/sub/:tmdb_id   -> Subtitle track list (OpenSubtitles)`);
     console.log(`  GET /src/webvtt/:id     -> WebVTT subtitle (stellarconductornexus)`);
+    console.log(`  GET /proxy              -> HLS proxy`);
   });
 }
 
-/* ---- Vercel serverless handler ---- */
 module.exports = app;

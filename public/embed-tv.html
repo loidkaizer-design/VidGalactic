@@ -18,9 +18,17 @@ button{font:inherit;color:inherit;background:none;border:0}
 html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
 .player-only{width:100%;margin:0;padding:0}
 .player-mount{width:min(100vw,177.7778dvh);height:auto;aspect-ratio:16/9;max-height:100dvh;margin:0 auto;background:#000}
+
+/* Error banner */
+#error-banner{position:fixed;top:0;left:0;right:0;background:rgba(200,30,30,.92);color:#fff;font-family:var(--mono);font-size:11px;padding:10px 16px;z-index:2000;text-align:center;display:none;backdrop-filter:blur(4px)}
+#error-banner .err-close{margin-left:12px;cursor:pointer;text-decoration:underline}
+
+/* Toast */
 .toast-zone{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:1100;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:100%}
-.toast{font-family:var(--mono);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:#fff;background:rgba(0,0,0,.85);border:1px solid var(--line2);padding:13px 22px;backdrop-filter:blur(8px);animation:toastIn .3s ease,toastOut .45s ease 2.7s forwards;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+.toast{font-family:var(--mono);font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:#fff;background:rgba(0,0,0,.85);border:1px solid var(--line2);padding:13px 22px;backdrop-filter:blur(8px);animation:toastIn .3s ease,toastOut .45s ease 3s forwards;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
 @keyframes toastIn{from{opacity:0;transform:translateY(14px)}}@keyframes toastOut{to{opacity:0;transform:translateY(10px)}}
+
+/* Player */
 .fplayer{position:relative;width:100%;height:100%;background:#000;overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;font-family:'Fredoka',sans-serif}
 .fplayer .vid{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000}
 .fplayer .poster-overlay{position:absolute;inset:0;background:#000;z-index:1;transition:opacity .6s ease}
@@ -33,15 +41,17 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
 .fplayer .center-play svg{fill:#fff}
 .fplayer .loading-backdrop{position:absolute;inset:0;z-index:5;background:transparent;opacity:1;visibility:visible;transition:opacity .45s ease,visibility .45s ease;pointer-events:none}
 .fplayer .loading-backdrop.hidden{opacity:0;visibility:hidden}
-.fplayer .buffer-loader{position:absolute;left:50%;top:50%;width:104px;height:104px;display:none;align-items:center;justify-content:center;transform:translate(-50%,-50%);z-index:6}
+.fplayer .buffer-loader{position:absolute;left:50%;top:50%;width:40px;height:40px;display:none;align-items:center;justify-content:center;transform:translate(-50%,-50%);z-index:6}
 .fplayer .loading-backdrop:not(.hidden) .buffer-loader{display:flex}
+.fplayer .buffer-loader div{border:4px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;width:100%;height:100%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .fplayer .bottom-controls{position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:12px 18px;z-index:10;opacity:0;transition:opacity .4s ease}
 .fplayer.show-controls .bottom-controls{opacity:1}
 .fplayer .ctrl-btn{background:transparent;border:none;color:rgba(255,255,255,.85);cursor:pointer;padding:13px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:all .2s ease}
 .fplayer .ctrl-btn svg{fill:currentColor;display:block;width:18px;height:18px}
 .fplayer .play-bottom{width:44px;height:44px}
 .fplayer .captionsBtn{position:relative}
-.fplayer .subtitles-menu{position:absolute;bottom:calc(100% + 10px);right:0;background:rgba(12,12,12,.94);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:6px;min-width:200px;opacity:0;visibility:hidden;transform:translateY(6px) scale(.95);transition:all .22s cubic-bezier(.4,0,.2,1);z-index:120;box-shadow:0 8px 40px rgba(0,0,0,.55)}
+.fplayer .subtitles-menu{position:absolute;bottom:calc(100% + 10px);right:0;background:rgba(12,12,12,.94);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:6px;min-width:220px;opacity:0;visibility:hidden;transform:translateY(6px) scale(.95);transition:all .22s cubic-bezier(.4,0,.2,1);z-index:120;box-shadow:0 8px 40px rgba(0,0,0,.55)}
 .fplayer .subtitles-menu.open{opacity:1;visibility:visible;transform:translateY(0) scale(1)}
 .fplayer .subtitles-header{font-size:11px;color:rgba(255,255,255,.5);padding:6px 12px 8px;text-transform:uppercase;letter-spacing:1px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:6px}
 .fplayer .sub-item{display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 12px;background:transparent;border:none;border-radius:8px;color:rgba(255,255,255,.75);font-size:14px;font-weight:500;cursor:pointer;text-align:left;transition:all .15s;gap:10px}
@@ -49,6 +59,7 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
 .fplayer .sub-item.active{background:rgba(255,255,255,.12);color:#fff}
 .fplayer .sub-check{opacity:0;transition:opacity .15s}
 .fplayer .sub-item.active .sub-check{opacity:1}
+.fplayer .sub-item.loading{color:rgba(255,255,255,.4);cursor:default}
 
 /* Episodes Panel — Vertical Coverflow Carousel */
 .fplayer .fp-ep-dim{position:absolute;inset:0;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .35s ease,visibility .35s ease;z-index:50;backdrop-filter:blur(2px);cursor:pointer}
@@ -82,9 +93,17 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
 .fplayer .fp-ep-card.is-dimmed{opacity:0.55;filter:brightness(0.65) saturate(0.7)}
 .fplayer .fp-ep-card.is-adjacent{transform:scale(0.96);filter:brightness(0.85)}
 @media(max-width:640px){.fplayer .fp-ep-panel{width:90vw}.fplayer .fp-ep-card{height:96px;padding:10px;gap:12px}.fplayer .fp-ep-thumb{width:86px;height:76px}.fplayer .fp-ep-card-title{font-size:13px}}
+
+/* Info panel */
+#info-panel{position:fixed;bottom:10px;right:10px;background:rgba(0,0,0,.7);color:#fff;font-family:var(--mono);font-size:10px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);z-index:1000;display:none;max-width:300px}
+#info-panel .info-row{margin:4px 0}
+#info-panel .info-label{color:var(--faint)}
+#info-panel .info-value{color:#fff;font-weight:bold}
 </style>
 </head>
 <body>
+  <div id="error-banner"></div>
+  <div id="info-panel"></div>
   <main class="player-only">
     <div class="player-mount" id="mount"></div>
   </main>
@@ -92,8 +111,11 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
 <script>
 (function(){
   'use strict';
+
   var mount = document.getElementById('mount');
   var pageTitle = document.getElementById('page-title');
+  var errorBanner = document.getElementById('error-banner');
+  var infoPanel = document.getElementById('info-panel');
 
   function getTmdbId(){
     var m = window.location.pathname.match(/\/e\/tv\/([0-9]+)/i);
@@ -104,7 +126,25 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
     return m ? decodeURIComponent(m[1]) : null;
   }
 
+  function showError(msg){
+    errorBanner.textContent = msg;
+    errorBanner.style.display = 'block';
+    var close = document.createElement('span');
+    close.className = 'err-close';
+    close.textContent = '✕';
+    close.onclick = function(){ errorBanner.style.display = 'none'; };
+    errorBanner.appendChild(close);
+  }
+
   function toast(msg,ms){var t=document.createElement('div');t.className='toast';t.textContent=msg;document.getElementById('toast-zone').appendChild(t);setTimeout(function(){t.remove();},ms||3000);}
+
+  function info(key,val){
+    infoPanel.style.display = 'block';
+    var row = document.createElement('div');
+    row.className = 'info-row';
+    row.innerHTML = '<span class="info-label">'+key+':</span> <span class="info-value">'+val+'</span>';
+    infoPanel.appendChild(row);
+  }
 
   function fetchJSON(url){
     return fetch(url,{headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'}}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});
@@ -115,7 +155,7 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
   root.innerHTML =
     '<video class="vid" preload="metadata" playsinline webkit-playsinline></video>'+
     '<div class="poster-overlay"><div class="poster-art"></div><div class="poster-scrim"></div><div class="poster-msg"></div></div>'+
-    '<div class="loading-backdrop"><div class="buffer-loader" aria-hidden="true"><div style="border:4px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite"></div></div></div>'+
+    '<div class="loading-backdrop"><div class="buffer-loader"><div></div></div></div>'+
     '<div class="center-play"><svg viewBox="0 0 24 24"><path fill="#fff" d="M8 5v14l11-7z"/></svg></div>'+
     '<div class="bottom-controls">'+
       '<button class="ctrl-btn play-bottom" title="Play/Pause"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg></button>'+
@@ -144,29 +184,87 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
   var epClose=epPanel.querySelector('.fp-ep-close');
 
   var hls=null, currentSubtitles=[], currentSeason=1, currentEpisode=1;
-  var allEpisodes=[]; // {s,e,title,stream_urls,backdrop}
+  var allEpisodes=[];
   var DEFAULT_LANG='en';
   var epIsOpen=false;
+  var retryCount=0, MAX_RETRIES=3;
 
-  function setLoading(l){var lb=root.querySelector('.loading-backdrop');lb.classList.toggle('hidden',!l);}
-  function togglePlay(){if(video.paused){video.play();}else{video.pause();}}
+  function setLoading(l){
+    var lb=root.querySelector('.loading-backdrop');
+    lb.classList.toggle('hidden',!l);
+  }
+  function togglePlay(){if(video.paused){video.play().catch(function(){});}else{video.pause();}}
   video.onclick=function(){togglePlay();};
-  video.onplay=function(){centerPlay.classList.add('hidden');posterOverlay.classList.add('hidden');setLoading(false);};
+  video.onplay=function(){centerPlay.classList.add('hidden');posterOverlay.classList.add('hidden');setLoading(false);retryCount=0;};
   video.onpause=function(){centerPlay.classList.remove('hidden');};
   video.onwaiting=function(){setLoading(true);};
   video.oncanplay=function(){setLoading(false);};
+  video.onerror=function(){
+    setLoading(false);
+    centerPlay.classList.remove('hidden');
+    var err=video.error;
+    showError('Video error: '+(err?err.message:'Unknown')+' — retrying…');
+    retryCount++;
+    if(retryCount<=MAX_RETRIES){
+      setTimeout(function(){
+        if(currentSource) loadEpisode(currentSource);
+      },2000);
+    } else {
+      showError('Failed to load stream after '+MAX_RETRIES+' retries.');
+    }
+  };
+
   playBtn.onclick=function(e){e.stopPropagation();togglePlay();};
   centerPlay.onclick=function(e){e.stopPropagation();togglePlay();};
 
-  /* subtitles */
-  function clearSubs(){currentSubtitles=[];for(var i=0;i<video.textTracks.length;i++)video.textTracks[i].mode='disabled';renderSubMenu();}
-  function addSub(url,lang,name){var tr=document.createElement('track');tr.kind='subtitles';tr.srclang=lang||'und';tr.label=name||lang||'Subtitle';tr.src=url;video.appendChild(tr);currentSubtitles.push({url:url,lang:lang,name:name,track:tr});renderSubMenu();return tr;}
-  function enableSub(idx){for(var i=0;i<video.textTracks.length;i++)video.textTracks[i].mode=i===idx?'showing':'disabled';renderSubMenu();var s=currentSubtitles[idx];captionsBtn.title=s?'Subtitles: '+(s.name||s.lang):'Subtitles';}
-  function renderSubMenu(){if(!subList)return;var html='<div class="subtitles-header">Subtitles</div>';if(currentSubtitles.length===0){html+='<div class="sub-item" style="color:rgba(255,255,255,.4);cursor:default;">None available</div>';subList.innerHTML=html;return;}currentSubtitles.forEach(function(s,i){var active=video.textTracks[i]&&video.textTracks[i].mode==='showing';html+='<button class="sub-item'+(active?' active':'')+'" data-index="'+i+'">'+(s.name||s.lang||'Subtitle')+'<span class="sub-check'+(active?'':' ')+'">✔</span></button>';});subList.innerHTML=html;root.querySelectorAll('.sub-item[data-index]').forEach(function(b){b.onclick=function(e){e.stopPropagation();enableSub(parseInt(this.dataset.index,10));subMenu.classList.remove('open');};});}
-  function toggleSubMenu(e){e.stopPropagation();renderSubMenu();subMenu.classList.toggle('open');}
+  /* ---- subtitles (client-side) ---- */
+  function clearSubs(){
+    currentSubtitles=[];
+    for(var i=0;i<video.textTracks.length;i++)video.textTracks[i].mode='disabled';
+    renderSubMenu();
+  }
+  function addSub(url,lang,name){
+    var tr=document.createElement('track');
+    tr.kind='subtitles';
+    tr.srclang=lang||'und';
+    tr.label=name||lang||'Subtitle';
+    tr.src=url;
+    video.appendChild(tr);
+    currentSubtitles.push({url:url,lang:lang,name:name,track:tr});
+    renderSubMenu();
+    return tr;
+  }
+  function enableSub(idx){
+    for(var i=0;i<video.textTracks.length;i++)video.textTracks[i].mode=i===idx?'showing':'disabled';
+    renderSubMenu();
+    var s=currentSubtitles[idx];
+    captionsBtn.title=s?'Subtitles: '+(s.name||s.lang):'Subtitles';
+  }
+  function renderSubMenu(){
+    if(!subList)return;
+    var html='<div class="subtitles-header">Subtitles</div>';
+    if(currentSubtitles.length===0){
+      html+='<div class="sub-item" style="color:rgba(255,255,255,.4);cursor:default;">None available</div>';
+      subList.innerHTML=html;
+      return;
+    }
+    currentSubtitles.forEach(function(s,i){
+      var active=video.textTracks[i]&&video.textTracks[i].mode==='showing';
+      html+='<button class="sub-item'+(active?' active':'')+'" data-index="'+i+'">'+(s.name||s.lang||'Subtitle')+'<span class="sub-check'+(active?'':' ')+'">✔</span></button>';
+    });
+    subList.innerHTML=html;
+    root.querySelectorAll('.sub-item[data-index]').forEach(function(b){
+      b.onclick=function(e){e.stopPropagation();enableSub(parseInt(this.dataset.index,10));subMenu.classList.remove('open');};
+    });
+  }
+  function toggleSubMenu(e){
+    e.stopPropagation();
+    renderSubMenu();
+    subMenu.classList.toggle('open');
+  }
   captionsBtn.onclick=toggleSubMenu;
 
-  /* episodes panel open/close */
+  /* ---- episodes panel ---- */
   function openPanel(){if(epIsOpen)return;epIsOpen=true;epPanel.classList.add('open');epDim.classList.add('open');root.classList.add('show-controls');setTimeout(function(){epList.focus({preventScroll:true});updateCards();},480);}
   function closePanel(){if(!epIsOpen)return;epIsOpen=false;epPanel.classList.remove('open');epDim.classList.remove('open');}
   episodesBtn.onclick=function(e){e.stopPropagation();if(epIsOpen)closePanel();else openPanel();};
@@ -222,17 +320,13 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
     updateCards();
   }
 
-  function playEpisode(s,e_){
-    currentSeason=s;currentEpisode=e_;
-    var ep=allEpisodes.find(function(x){return x.s===s&&x.e===e_;});
-    if(!ep){posterMsg.textContent='NO DATA S'+s+'E'+e_;toast('Episode not found',3000);return;}
-    var urls=ep.stream_urls||[];if(!urls||urls.length===0){posterMsg.textContent='NO STREAM S'+s+'E'+e_;toast('No stream URL',3000);return;}
-    var streamUrl=urls[0];
+  var currentSource=null;
+  function loadEpisode(streamUrl){
+    currentSource=streamUrl;
     if(hls){try{hls.destroy();}catch(e2){}hls=null;}
-    video.removeAttribute('src');clearSubs();currentSource=streamUrl;
+    video.removeAttribute('src');clearSubs();
     setLoading(true);posterOverlay.classList.remove('hidden');centerPlay.classList.remove('hidden');
-    // Proxy HLS through our server to avoid CORS/Referer issues with stream hosts
-    var proxyUrl = '/proxy?url=' + encodeURIComponent(streamUrl);
+    var proxyUrl='/proxy?url='+encodeURIComponent(streamUrl);
     if(/m3u8/i.test(streamUrl)&&window.Hls&&window.Hls.isSupported()){
       hls=new Hls({
         maxBufferLength:30,
@@ -241,17 +335,49 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
           xhr.setRequestHeader('Origin','https://nextgencloudfabric.com');
         }
       });
-      hls.loadSource(proxyUrl);hls.attachMedia(video);
-    }else{video.src=proxyUrl;}
+      hls.loadSource(proxyUrl);
+      hls.attachMedia(video);
+    } else {
+      video.src=proxyUrl;
+    }
+  }
+
+  function playEpisode(s,e_){
+    currentSeason=s;currentEpisode=e_;
+    var ep=allEpisodes.find(function(x){return x.s===s&&x.e===e_;});
+    if(!ep){posterMsg.textContent='NO DATA S'+s+'E'+e_;toast('Episode not found',3000);return;}
+    var urls=ep.stream_urls||[];if(!urls||urls.length===0){posterMsg.textContent='NO STREAM S'+s+'E'+e_;toast('No stream URL',3000);return;}
+    var streamUrl=urls[0];
+    loadEpisode(streamUrl);
     posterMsg.textContent=(ep.title||'Episode '+e_)+' · S'+s+'E'+e_;
     pageTitle.textContent='S'+s+'E'+e_+' — Galactic V5';
-    // subtitles
-    var subs=window._TV_SUBS||[];
-    if(subs&&subs.length>0){
-      subs.forEach(function(s_){if(s_&&s_.url)addSub(s_.url,s_.code||s_.lang||'und',s_.name||s_.code||s_.lang||'Subtitle');});
-      var sc=setInterval(function(){if(video.textTracks&&video.textTracks.length>0){clearInterval(sc);var ti=-1;if(DEFAULT_LANG){for(var k=0;k<video.textTracks.length;k++){if(String((video.textTracks[k].srclang||'')).toLowerCase()===DEFAULT_LANG.toLowerCase()){ti=k;break;}}}if(ti<0&&video.textTracks.length>0)ti=0;if(ti>=0)enableSub(ti);renderSubMenu();}},100);setTimeout(function(){clearInterval(sc);},5000);
-    }
-    renderEpisodes();toast('S'+s+'E'+e_+' · '+(ep.title||'Episode'),2500);
+
+    // Fetch subtitles client-side from /src/sub/:tmdb_id
+    fetchJSON('/src/sub/'+encodeURIComponent(tmdbId)).then(function(subJson){
+      var subs = subJson.subtitles || [];
+      if(subs&&subs.length>0){
+        subs.forEach(function(s_){if(s_&&s_.url)addSub(s_.url,s_.code||s_.lang||'und',s_.name||s_.code||s_.lang||'Subtitle');});
+        var sc=setInterval(function(){
+          if(video.textTracks&&video.textTracks.length>0){
+            clearInterval(sc);
+            var ti=-1;
+            if(DEFAULT_LANG){
+              for(var k=0;k<video.textTracks.length;k++){
+                if(String((video.textTracks[k].srclang||'')).toLowerCase()===DEFAULT_LANG.toLowerCase()){ti=k;break;}
+              }
+            }
+            if(ti<0&&video.textTracks.length>0)ti=0;
+            if(ti>=0)enableSub(ti);
+            renderSubMenu();
+          }
+        },100);setTimeout(function(){clearInterval(sc);},5000);
+      }
+    }).catch(function(subErr){
+      console.error('Subtitle fetch error:', subErr);
+    });
+
+    renderEpisodes();
+    toast('S'+s+'E'+e_+' · '+(ep.title||'Episode'),2500);
   }
 
   /* ---- main ---- */
@@ -261,6 +387,9 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
   if(!tmdbId){posterMsg.textContent='NO TMDB ID';centerPlay.classList.remove('hidden');setLoading(false);return;}
   pageTitle.textContent='TV '+tmdbId+' — Galactic V5';
   posterMsg.textContent='LOADING SERIES '+tmdbId+'…';
+
+  info('TMDB', tmdbId);
+  info('IMDB', 'resolving…');
 
   var url='/e/tv/'+encodeURIComponent(tmdbId);
   if(qsSeason)url+='?season='+qsSeason;
@@ -272,8 +401,10 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
     var backdrop=data.backdrop||'';
     var eps=data.eps||{};
     var streamUrls=data.stream_urls||[];
-    var subs=json.default_subs||[];
-    window._TV_SUBS=subs;
+    // Subtitles fetched client-side below
+    info('IMDB', data.imdb_id||'—');
+    info('Streams', streamUrls.length);
+    info('Subs', 'fetching…');
     if(backdrop){posterArt.style.backgroundImage='url('+backdrop+')';video.poster=backdrop;}
     posterMsg.textContent=title;pageTitle.textContent=title+' — Galactic V5';
 
@@ -283,7 +414,7 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
     if(allEpisodes.length===0){allEpisodes.push({s:1,e:1,title:title,stream_urls:streamUrls,backdrop:backdrop});currentSeason=1;currentEpisode=1;}
     else{currentSeason=allEpisodes[0].s;currentEpisode=allEpisodes[0].e;}
 
-    // build panel
+    // Build episodes panel
     epDim=document.createElement('div');epDim.className='fp-ep-dim';root.appendChild(epDim);
     epPanel=document.createElement('div');epPanel.className='fp-ep-panel';epPanel.innerHTML=
       '<div class="fp-ep-header"><div class="fp-ep-title">Episodes</div><button type="button" class="fp-ep-close" aria-label="Close"><svg viewBox="0 0 14 14"><path d="M2 2 L12 12 M12 2 L2 12" stroke="#fff" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button></div>'+
@@ -297,7 +428,14 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
     renderEpisodes();
     playEpisode(currentSeason,currentEpisode);
     toast(title,2500);
-  }).catch(function(err){console.error(err);posterMsg.textContent='ERROR: '+String(err.message||err);toast('Failed to load series',4000);centerPlay.classList.remove('hidden');setLoading(false);});
+  }).catch(function(err){
+    console.error(err);
+    posterMsg.textContent='ERROR: '+String(err.message||err);
+    toast('Failed to load series',4000);
+    centerPlay.classList.remove('hidden');
+    setLoading(false);
+    showError('Failed to load series: '+String(err.message||err));
+  });
 
 })();
 </script>
