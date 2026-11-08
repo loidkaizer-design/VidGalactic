@@ -156,9 +156,27 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
     setLoading(false);
     centerPlay.classList.remove('hidden');
     var err = video.error;
-    showError('Video error: '+(err?err.message:'Unknown error')+' — retrying stream...');
+    var msg = 'Unknown video error';
+    if(err){
+      switch(err.code){
+        case 1: msg = 'MEDIA_ERR_ABORTED: Fetching aborted'; break;
+        case 2: msg = 'MEDIA_ERR_NETWORK: Network download failed'; break;
+        case 3: msg = 'MEDIA_ERR_DECODE: Decode failed (unsupported format)'; break;
+        case 4: msg = 'MEDIA_ERR_SRC_NOT_SUPPORTED: Source not supported'; break;
+      }
+      msg += ' (' + (err.message||'') + ')';
+    }
+    showError('Video error: ' + msg + ' — retrying stream...');
+    console.log('[VIDEO ERROR]', err);
     retryStream();
   };
+
+  window.addEventListener('error', function(e){
+    if(e.filename && e.filename.includes('hls')){
+      console.log('[HLS JS LOAD ERROR]', e.message);
+      showError('hls.js failed to load: ' + (e.message||'Unknown'));
+    }
+  }, true);
 
   /* ---- subtitles (client-side) ---- */
   function clearSubs(){
@@ -233,11 +251,15 @@ html,body{margin:0;width:100%;min-height:0;background:#000;overflow:hidden}
         setLoading(false);
         centerPlay.classList.remove('hidden');
         retryCount++;
+        var type = data.type||'unknown';
+        var details = data.details||'unknown';
+        var fatal = data.fatal?'FATAL':'non-fatal';
+        console.log('[HLS ERROR]', {type:type, details:details, fatal:fatal, response:data.response, url:data.url});
+        showError('HLS error ['+type+'] '+details+' ('+fatal+') — retry '+retryCount+'/'+MAX_RETRIES+'…');
         if(retryCount<=MAX_RETRIES){
-          showError('Stream error — retry '+retryCount+'/'+MAX_RETRIES+'…');
-          setTimeout(function(){ loadMovie(streamUrl, subs); }, 2000);
+          setTimeout(function(){ retryStream(); }, 2000);
         } else {
-          showError('Failed to load stream after '+MAX_RETRIES+' retries. Try again later.');
+          showError('HLS stream failed after '+MAX_RETRIES+' retries. Check console for details.');
         }
       });
     } else {
